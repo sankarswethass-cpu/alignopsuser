@@ -1,6 +1,6 @@
 import type { TeamOKRData } from "@/data/mockData";
 
-const API_BASE = "http://localhost:4000";
+const API_BASE = "https://alignopsuser.onrender.com";
 
 export async function fetchTeamOKRs(
   userId: string | undefined,
