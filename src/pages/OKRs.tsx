@@ -1,9 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import {
-  teams, quarters, getTeamOKRs, calculateObjectiveProgress,
-  getProgressColor, getConfidenceColor, getTrendIcon,
-  type Objective, type KeyResult,
+  teams,
+  quarters,
+  calculateObjectiveProgress,
+  getProgressColor,
+  getConfidenceColor,
+  getTrendIcon,
+  type Objective,
+  type KeyResult,
+  type TeamOKRData
 } from "@/data/mockData";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -13,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, ChevronDown, ChevronRight, Pencil, Trash2, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { fetchTeamOKRs, saveTeamOKRs } from "@/api/okrApi";
 
 const OKRs = () => {
   const [selectedTeam, setSelectedTeam] = useState(() => localStorage.getItem("alignops_team") || "product");
@@ -38,28 +45,52 @@ const OKRs = () => {
   const [editingKr, setEditingKr] = useState<KeyResult | null>(null);
 
   // Local OKR data (mutable copy)
-  const [localData, setLocalData] = useState(() => {
-    const data = getTeamOKRs(selectedTeam, selectedQuarter);
-    return data ? { ...data, objectives: data.objectives.map(o => ({ ...o, keyResults: [...o.keyResults] })) } : null;
-  });
+  const [localData, setLocalData] = useState<TeamOKRData | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const { toast } = useToast();
 
-  const refreshData = (team: string, quarter: string) => {
-    const data = getTeamOKRs(team, quarter);
-    setLocalData(data ? { ...data, objectives: data.objectives.map(o => ({ ...o, keyResults: [...o.keyResults] })) } : null);
+  const user = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("alignops_user") || "{}");
+    } catch {
+      return {};
+    }
+  })();
+
+  const refreshData = async (team: string, quarter: string) => {
+    if (!user.id || !team || !quarter) {
+      setLocalData(null);
+      return;
+    }
+    setLoading(true);
+    const data = await fetchTeamOKRs(user.id, team, quarter);
+    setLocalData(
+      data
+        ? {
+            ...data,
+            objectives: data.objectives.map((o) => ({ ...o, keyResults: [...o.keyResults] }))
+          }
+        : null
+    );
+    setLoading(false);
   };
+
+  useEffect(() => {
+    void refreshData(selectedTeam, selectedQuarter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleTeamChange = (t: string) => {
     setSelectedTeam(t);
     localStorage.setItem("alignops_team", t);
-    refreshData(t, selectedQuarter);
+    void refreshData(t, selectedQuarter);
   };
 
   const handleQuarterChange = (q: string) => {
     setSelectedQuarter(q);
     localStorage.setItem("alignops_quarter", q);
-    refreshData(selectedTeam, q);
+    void refreshData(selectedTeam, q);
   };
 
   const toggleExpand = (id: string) => {
@@ -86,16 +117,30 @@ const OKRs = () => {
   // Add Objective
   const handleAddObjective = () => {
     if (!objTitle.trim()) return;
-    if (!localData) return;
+
+    const baseData: TeamOKRData =
+      localData ?? {
+        ownerUserId: user.id,
+        teamId: selectedTeam,
+        quarterId: selectedQuarter,
+        vision: "",
+        strategy: "",
+        objectives: []
+      };
+
     const newObj: Objective = {
       id: `obj-new-${Date.now()}`,
-      number: localData.objectives.length + 1,
+      number: baseData.objectives.length + 1,
       title: objTitle,
       weightage: objWeight ? parseInt(objWeight) : undefined,
-      keyResults: [],
+      keyResults: []
     };
-    setLocalData({ ...localData, objectives: [...localData.objectives, newObj] });
-    setExpandedObjectives(prev => new Set([...prev, newObj.id]));
+
+    const next: TeamOKRData = { ...baseData, objectives: [...baseData.objectives, newObj] };
+
+    setLocalData(next);
+    void saveTeamOKRs(user.id, next);
+    setExpandedObjectives((prev) => new Set([...prev, newObj.id]));
     setObjTitle("");
     setObjWeight("");
     setAddObjOpen(false);
@@ -116,12 +161,14 @@ const OKRs = () => {
       lastUpdated: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "numeric", year: "2-digit" }),
       comments: krComments,
     };
-    setLocalData({
+    const next: TeamOKRData = {
       ...localData,
-      objectives: localData.objectives.map(o =>
+      objectives: localData.objectives.map((o) =>
         o.id === activeObjectiveId ? { ...o, keyResults: [...o.keyResults, newKr] } : o
-      ),
-    });
+      )
+    };
+    setLocalData(next);
+    void saveTeamOKRs(user.id, next);
     resetKrForm();
     setAddKrOpen(false);
     toast({ title: "Key Result added" });
@@ -141,24 +188,32 @@ const OKRs = () => {
 
   const handleEditKr = () => {
     if (!editingKr || !localData) return;
-    setLocalData({
+    const next: TeamOKRData = {
       ...localData,
-      objectives: localData.objectives.map(o => ({
+      objectives: localData.objectives.map((o) => ({
         ...o,
-        keyResults: o.keyResults.map(kr =>
-          kr.id === editingKr.id ? {
-            ...kr,
-            description: krDesc,
-            owner: krOwner,
-            weightage: parseInt(krWeight) || 0,
-            confidence: parseInt(krConfidence) as 1 | 3 | 5,
-            progress: parseInt(krProgress) || 0,
-            comments: krComments,
-            lastUpdated: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "numeric", year: "2-digit" }),
-          } : kr
-        ),
-      })),
-    });
+        keyResults: o.keyResults.map((kr) =>
+          kr.id === editingKr.id
+            ? {
+                ...kr,
+                description: krDesc,
+                owner: krOwner,
+                weightage: parseInt(krWeight) || 0,
+                confidence: parseInt(krConfidence) as 1 | 3 | 5,
+                progress: parseInt(krProgress) || 0,
+                comments: krComments,
+                lastUpdated: new Date().toLocaleDateString("en-GB", {
+                  day: "numeric",
+                  month: "numeric",
+                  year: "2-digit"
+                })
+              }
+            : kr
+        )
+      }))
+    };
+    setLocalData(next);
+    void saveTeamOKRs(user.id, next);
     resetKrForm();
     setEditKrOpen(false);
     toast({ title: "Key Result updated" });
@@ -168,16 +223,23 @@ const OKRs = () => {
   const confirmDelete = () => {
     if (!deleteTarget || !localData) return;
     if (deleteTarget.type === "obj") {
-      setLocalData({ ...localData, objectives: localData.objectives.filter(o => o.id !== deleteTarget.id) });
+      const next: TeamOKRData = {
+        ...localData,
+        objectives: localData.objectives.filter((o) => o.id !== deleteTarget.id)
+      };
+      setLocalData(next);
+      void saveTeamOKRs(user.id, next);
       toast({ title: "Objective deleted" });
     } else {
-      setLocalData({
+      const next: TeamOKRData = {
         ...localData,
-        objectives: localData.objectives.map(o => ({
+        objectives: localData.objectives.map((o) => ({
           ...o,
-          keyResults: o.keyResults.filter(kr => kr.id !== deleteTarget.id),
-        })),
-      });
+          keyResults: o.keyResults.filter((kr) => kr.id !== deleteTarget.id)
+        }))
+      };
+      setLocalData(next);
+      void saveTeamOKRs(user.id, next);
       toast({ title: "Key Result deleted" });
     }
     setDeleteConfirmOpen(false);

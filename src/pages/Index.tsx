@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { login as apiLogin, signup as apiSignup } from "@/api/authApi";
 
 const features = [
   { icon: Settings, label: "Workflow Automation" },
@@ -33,18 +34,26 @@ const Index = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
       toast({ title: "Error", description: "Please fill in all fields", variant: "destructive" });
       return;
     }
-    // Mock login - navigate to dashboard
-    localStorage.setItem("alignops_user", JSON.stringify({ email, name: "Demo User" }));
-    navigate("/dashboard");
+    try {
+      const user = await apiLogin(email, password);
+      localStorage.setItem("alignops_user", JSON.stringify(user));
+      navigate("/dashboard");
+    } catch (err: any) {
+      toast({
+        title: "Login failed",
+        description: err?.message || "Unable to log in. Please check your credentials.",
+        variant: "destructive"
+      });
+    }
   };
 
-  const handleSignup = (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName || !email || !password || !confirmPassword) {
       toast({ title: "Error", description: "Please fill in all fields", variant: "destructive" });
@@ -58,8 +67,17 @@ const Index = () => {
       toast({ title: "Error", description: "Password must be at least 8 characters", variant: "destructive" });
       return;
     }
-    localStorage.setItem("alignops_user", JSON.stringify({ email, name: fullName }));
-    navigate("/dashboard");
+    try {
+      const user = await apiSignup(fullName, email, password);
+      localStorage.setItem("alignops_user", JSON.stringify(user));
+      navigate("/dashboard");
+    } catch (err: any) {
+      toast({
+        title: "Signup failed",
+        description: err?.message || "Unable to create account. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   return (

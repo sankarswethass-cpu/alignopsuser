@@ -2,24 +2,45 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import ProgressPieChart from "@/components/ProgressPieChart";
-import { teams, quarters, getTeamOKRs, calculateTeamProgress } from "@/data/mockData";
+import { teams, quarters, calculateTeamProgress, type TeamOKRData } from "@/data/mockData";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
+import { fetchTeamOKRs } from "@/api/okrApi";
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const [selectedTeam, setSelectedTeam] = useState(() => localStorage.getItem("alignops_team") || "");
   const [selectedQuarter, setSelectedQuarter] = useState(() => localStorage.getItem("alignops_quarter") || "q1-2026");
+  const [teamOKRs, setTeamOKRs] = useState<TeamOKRData | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const user = (() => {
-    try { return JSON.parse(localStorage.getItem("alignops_user") || "{}"); } catch { return {}; }
+    try {
+      return JSON.parse(localStorage.getItem("alignops_user") || "{}");
+    } catch {
+      return {};
+    }
   })();
 
   useEffect(() => {
     if (selectedTeam) localStorage.setItem("alignops_team", selectedTeam);
     if (selectedQuarter) localStorage.setItem("alignops_quarter", selectedQuarter);
   }, [selectedTeam, selectedQuarter]);
+
+  useEffect(() => {
+    const load = async () => {
+      if (!user.id || !selectedTeam || !selectedQuarter) {
+        setTeamOKRs(null);
+        return;
+      }
+      setLoading(true);
+      const data = await fetchTeamOKRs(user.id, selectedTeam, selectedQuarter);
+      setTeamOKRs(data);
+      setLoading(false);
+    };
+    load();
+  }, [selectedTeam, selectedQuarter, user.id]);
 
   const greeting = (() => {
     const h = new Date().getHours();
@@ -28,7 +49,6 @@ const Dashboard = () => {
     return "Good evening";
   })();
 
-  const teamOKRs = selectedTeam ? getTeamOKRs(selectedTeam, selectedQuarter) : undefined;
   const progress = teamOKRs ? calculateTeamProgress(teamOKRs.objectives) : 0;
 
   return (
@@ -75,7 +95,9 @@ const Dashboard = () => {
           <div className="bg-card rounded-xl border border-border p-8 flex flex-col items-center animate-fade-in">
             <ProgressPieChart progress={progress} />
             <p className="mt-4 text-sm text-muted-foreground">
-              {teamOKRs
+              {loading
+                ? "Loading OKR data from server..."
+                : teamOKRs
                 ? `Based on ${teamOKRs.objectives.length} objective${teamOKRs.objectives.length !== 1 ? "s" : ""} and ${teamOKRs.objectives.reduce((s, o) => s + o.keyResults.length, 0)} key results`
                 : "No OKR data for this team and quarter"}
             </p>

@@ -35,6 +35,7 @@ export type Objective = {
 };
 
 export type TeamOKRData = {
+  ownerUserId?: string;
   teamId: string;
   quarterId: string;
   vision: string;
