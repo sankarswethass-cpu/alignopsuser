@@ -1,0 +1,29 @@
+[
+    {
+      "teamId": "product",
+      "quarterId": "q1-2026",
+      "vision": "Deliver innovative solutions that solve customer problems",
+      "strategy": "2026 Product Strategy",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "number": 1,
+          "title": "Deliver high-impact modules that expand product coverage",
+          "weightage": 50,
+          "keyResults": [
+            {
+              "id": "kr-1a",
+              "description": "Launch 5 new modules (EUDR, PPWR, EUBR, PCF, IMDS Connect)",
+              "owner": "Swetha",
+              "weightage": 30,
+              "confidence": 5,
+              "trend": "up",
+              "progress": 50,
+              "lastUpdated": "2026-02-13",
+              "comments": "EUDR - Design 3%, PPWR - Design 3%, IMDS - 6%"
+            }
+          ]
+        }
+      ]
+    }
+]
